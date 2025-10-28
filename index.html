@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Multiplication Tables 1 → 100</title>
+<style>
+  :root{
+    --bg:#0f1724; --card:#0b1220; --muted:#94a3b8; --accent:#38bdf8; --glass: rgba(255,255,255,0.04);
+    --radius:12px; --gap:16px; --max-width:1200px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; font-family:Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    background:linear-gradient(180deg,#071022 0%,var(--bg) 100%); color:#e6eef8;
+    -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+    padding:24px; display:flex; justify-content:center;
+  }
+
+  .app {
+    width:100%; max-width:var(--max-width);
+  }
+
+  header{
+    display:flex; gap:12px; align-items:center; margin-bottom:18px; flex-wrap:wrap;
+  }
+  h1{margin:0; font-size:20px; letter-spacing:0.2px}
+  p.lead{margin:0; color:var(--muted); font-size:13px}
+
+  .controls{
+    margin-left:auto; display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+    background:var(--glass); padding:8px; border-radius:10px;
+  }
+  label{font-size:13px; color:var(--muted); display:flex; gap:6px; align-items:center}
+  input[type="number"], select{
+    background:transparent; border:1px solid rgba(255,255,255,0.06); color:inherit; padding:6px 8px;
+    border-radius:8px; width:84px;
+  }
+  button{
+    background:linear-gradient(90deg,var(--accent),#60a5fa); border:0; padding:8px 12px; color:#04263b; 
+    border-radius:10px; cursor:pointer; font-weight:600;
+  }
+  button.ghost{background:transparent; color:var(--accent); border:1px solid rgba(255,255,255,0.06); font-weight:600}
+
+  main{margin-top:18px}
+  .grid{
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap:var(--gap);
+  }
+
+  .card{
+    background:linear-gradient(0deg, rgba(255,255,255,0.02), rgba(255,255,255,0.015));
+    border-radius:var(--radius); padding:12px; box-shadow: 0 6px 18px rgba(2,6,23,0.6);
+    border: 1px solid rgba(255,255,255,0.03);
+  }
+  .card h2{margin:0 0 8px 0; font-size:16px}
+  .table-wrap{overflow:auto; max-height:220px;}
+  table{width:100%; border-collapse:collapse; font-size:14px}
+  thead th{position:sticky; top:0; background:rgba(0,0,0,0.15); text-align:left; padding:6px 8px; font-weight:700}
+  td{padding:6px 8px; border-bottom:1px dashed rgba(255,255,255,0.03)}
+  tr.highlight td{background:linear-gradient(90deg, rgba(56,189,248,0.06), transparent)}
+  .small{font-size:12px; color:var(--muted)}
+
+  .actions{display:flex; gap:8px; margin-top:8px; align-items:center; flex-wrap:wrap}
+  .badge{font-size:12px; background:rgba(255,255,255,0.03); padding:4px 8px; border-radius:8px; color:var(--muted)}
+
+  footer{margin-top:18px; color:var(--muted); font-size:13px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;}
+  a{color:var(--accent); text-decoration:none}
+
+  @media (max-width:520px){
+    input[type="number"]{width:64px}
+    header{gap:8px}
+  }
+</style>
+</head>
+<body>
+  <div class="app" role="application" aria-label="Multiplication tables generator">
+    <header>
+      <div>
+        <h1>Multiplication Tables — 1 to 100</h1>
+        <p class="lead">Generate multiplication tables and export or copy results. Default table size is 1 × 10 (times 1..10).</p>
+      </div>
+
+      <div class="controls" aria-label="controls">
+        <label>
+          From
+          <input id="from" type="number" min="1" max="100" value="1" aria-label="from number"/>
+        </label>
+
+        <label>
+          To
+          <input id="to" type="number" min="1" max="100" value="20" aria-label="to number"/>
+        </label>
+
+        <label>
+          Multiply up to
+          <select id="upto" aria-label="multiply up to">
+            <option value="10">10</option>
+            <option value="12">12</option>
+            <option value="20">20</option>
+          </select>
+        </label>
+
+        <button id="generate">Generate</button>
+        <button id="export" class="ghost" title="Export visible tables to text">Export TXT</button>
+        <button id="copy" class="ghost" title="Copy visible tables to clipboard">Copy</button>
+      </div>
+    </header>
+
+    <main>
+      <div class="actions">
+        <span class="badge" id="countBadge">Showing: 0 tables</span>
+        <label class="small" style="margin-left:auto">Search product
+          <input id="search" type="number" min="1" placeholder="e.g. 24" style="margin-left:8px; width:120px;">
+        </label>
+      </div>
+
+      <section id="grid" class="grid" aria-live="polite" style="margin-top:12px"></section>
+
+      <footer>
+        <div>Tip: double-click any table cell to highlight its row. Use Export / Copy to save results.</div>
+        <div>&copy; <span id="year"></span> Multiplication Tables</div>
+      </footer>
+    </main>
+  </div>
+
+<script>
+/*
+  Multiplication Tables App
+  - Generates tables for numbers in [from..to], each showing multipliers 1..upto
+  - Search highlights any table rows whose product matches search number
+  - Export builds a plain-text representation of visible tables and downloads it
+  - Copy writes visible tables to clipboard
+  - Lightweight, no external libs
+*/
+
+(() => {
+  const el = id => document.getElementById(id);
+  const grid = el('grid');
+  const fromIn = el('from'); const toIn = el('to'); const uptoSel = el('upto');
+  const genBtn = el('generate'); const exportBtn = el('export'); const copyBtn = el('copy');
+  const countBadge = el('countBadge'); const searchIn = el('search');
+  const yearSpan = el('year'); yearSpan.textContent = new Date().getFullYear();
+
+  // Simple utility to clamp numbers
+  const clamp = (n, a, b) => Math.max(a, Math.min(b, n|0));
+
+  // Create table card markup for a single number n
+  function createTableCard(n, upto) {
+    const card = document.createElement('article');
+    card.className = 'card';
+    card.setAttribute('data-n', n);
+    card.innerHTML = `
+      <h2>Table of ${n}</h2>
+      <div class="table-wrap" tabindex="0" aria-label="Multiplication table of ${n}">
+        <table>
+          <thead><tr><th>Multiplier</th><th>Expression</th><th>Product</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    `;
+    const tbody = card.querySelector('tbody');
+    for (let i=1;i<=upto;i++){
+      const prod = n * i;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${i}</td><td>${n} × ${i}</td><td>${prod}</td>`;
+      tbody.appendChild(tr);
+      // double-click a cell -> highlight row for visibility
+      tr.addEventListener('dblclick', ()=> {
+        tr.classList.toggle('highlight');
+      });
+    }
+    return card;
+  }
+
+  // Render tables for given range and upto
+  function render(from, to, upto) {
+    grid.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    for (let n=from; n<=to; n++){
+      frag.appendChild( createTableCard(n, upto) );
+    }
+    grid.appendChild(frag);
+    countBadge.textContent = `Showing: ${Math.max(0,to-from+1)} tables (${from} → ${to})`;
+  }
+
+  // Build text export for currently visible tables (DOM order)
+  function buildExportText() {
+    const cards = Array.from(grid.querySelectorAll('.card'));
+    if (!cards.length) return '';
+    let txt = '';
+    cards.forEach(card=>{
+      const n = card.getAttribute('data-n');
+      txt += `Table of ${n}\n`;
+      card.querySelectorAll('tbody tr').forEach(tr=>{
+        const cells = Array.from(tr.children).map(td => td.textContent.trim());
+        txt += `${cells[1]} = ${cells[2]}\n`;
+      });
+      txt += '\n';
+    });
+    return txt;
+  }
+
+  // Download helper
+  function downloadText(filename, content) {
+    const blob = new Blob([content], {type:'text/plain;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    a.remove(); URL.revokeObjectURL(url);
+  }
+
+  // Debounce helper
+  function debounce(fn, wait=200){
+    let t;
+    return (...args) => {
+      clearTimeout(t);
+      t = setTimeout(()=> fn(...args), wait);
+    };
+  }
+
+  // Validate inputs and generate
+  function generateHandler() {
+    let from = clamp(parseInt(fromIn.value||'1'),1,100);
+    let to = clamp(parseInt(toIn.value||'1'),1,100);
+    if (from > to) { // swap if reversed
+      const tmp = from; from = to; to = tmp;
+      fromIn.value = from; toIn.value = to;
+    }
+    const upto = clamp(parseInt(uptoSel.value||'10'),1,100);
+    // keep DOM responsive: slice into chunks if large range (not necessary up to 100 but kept safe)
+    render(from, to, upto);
+    applySearch(); // apply any active search to highlight
+  }
+
+  // Apply search: highlight rows whose product equals search value
+  function applySearch() {
+    const q = searchIn.value.trim();
+    if (!q) {
+      // remove highlighted class from any previously highlighted row elements
+      grid.querySelectorAll('tr.highlight').forEach(tr => tr.classList.remove('highlight'));
+      return;
+    }
+    const num = parseInt(q);
+    if (Number.isNaN(num)) return;
+    // For each card, highlight matching rows
+    grid.querySelectorAll('.card').forEach(card => {
+      card.querySelectorAll('tbody tr').forEach(tr => {
+        const product = parseInt(tr.children[2].textContent.trim());
+        if (product === num) {
+          tr.classList.add('highlight');
+          // ensure the card is scrolled into view if it contains a match
+          // (only do this for the first match to avoid excessive scrolling)
+        } else {
+          tr.classList.remove('highlight');
+        }
+      });
+    });
+  }
+
+  // Export visible tables (text)
+  function exportHandler() {
+    const text = buildExportText();
+    if (!text) {
+      alert('No tables to export. Generate tables first.');
+      return;
+    }
+    const now = new Date();
+    const stamp = now.toISOString().replace(/[:T]/g,'-').split('.')[0];
+    const filename = `multiplication-tables-${stamp}.txt`;
+    downloadText(filename, text);
+  }
+
+  // Copy visible tables to clipboard
+  async function copyHandler() {
+    const text = buildExportText();
+    if (!text) { alert('No tables to copy. Generate tables first.'); return; }
+    try {
+      await navigator.clipboard.writeText(text);
+      copyBtn.textContent = 'Copied';
+      setTimeout(()=> copyBtn.textContent = 'Copy', 1500);
+    } catch (e) {
+      alert('Copy failed: ' + (e && e.message ? e.message : e));
+    }
+  }
+
+  // Keyboard accessibility: Enter on generate triggers generation
+  genBtn.addEventListener('click', generateHandler);
+  exportBtn.addEventListener('click', exportHandler);
+  copyBtn.addEventListener('click', copyHandler);
+  searchIn.addEventListener('input', debounce(applySearch, 150));
+
+  // Allow Enter key in inputs to generate quickly
+  [fromIn, toIn, uptoSel].forEach(i => i.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') generateHandler();
+  }));
+
+  // Initialize with default render
+  generateHandler();
+
+  // Small UX: clicking a card header copies that table text to clipboard
+  grid.addEventListener('click', (ev) => {
+    const h2 = ev.target.closest('h2');
+    if (h2) {
+      const card = h2.closest('.card');
+      const t = (card) ? ( `Table of ${card.getAttribute('data-n')}\n` + Array.from(card.querySelectorAll('tbody tr')).map(tr=> {
+        return `${tr.children[1].textContent} = ${tr.children[2].textContent}`;
+      }).join('\n') ) : '';
+      if (t) {
+        navigator.clipboard?.writeText(t).then(()=> {
+          h2.textContent = h2.textContent + ' ✓';
+          setTimeout(()=> h2.textContent = h2.textContent.replace(' ✓',''), 900);
+        }).catch(()=>{/* ignore */});
+      }
+    }
+  });
+
+  // Accessibility: focus styles (visible by keyboard)
+  document.addEventListener('keyup', (e) => {
+    if (e.key === 'Tab') document.body.classList.add('show-focus');
+  });
+})();
+</script>
+</body>
+</html>
